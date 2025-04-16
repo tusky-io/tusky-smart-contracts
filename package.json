@@ -1,0 +1,17 @@
+{
+  "name": "tusky-smart-contracts",
+  "version": "1.0.0",
+  "description": "A monorepo for all Tusky smart contracts on Sui",
+  "main": "",
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@mysten/sui": "^1.27.1",
+    "dotenv": "^16.5.0",
+    "jest": "^29.7.0"
+  }
+}
