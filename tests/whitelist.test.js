@@ -2,15 +2,18 @@ require("dotenv").config();
 const { Ed25519Keypair } = require('@mysten/sui/keypairs/ed25519');
 const { SuiClient, getFullnodeUrl } = require('@mysten/sui/client');
 const { Transaction } = require('@mysten/sui/transactions');
+const { fromHex } = require('@mysten/bcs');
 
 const suiClient = new SuiClient({ url: getFullnodeUrl('testnet') });
 
-const EXAMPLE_TOKEN_GATING_TYPE = "0xd84704c17fc870b8764832c535aa6b11f21a95cd6f5bb38a9b07d2cf42220c66::blob::Blob";
+const EXAMPLE_TOKEN_GATING_TYPE = "0x2::coin::Coin<0x8190b041122eb492bf63cb464476bd68c6b7e570a4079645a8b28732b6197a82::wal::WAL>";
+const EXAMPLE_TOKEN_OBJECT_ID = "0x4c4fdf70c5261c0b3b9495fe2ac57e92f2016025a8db469279af65404433384d";
 
 describe(`Testing owner-only whitelist`, () => {
 
   let whitelistId;
   let capId;
+  let tgaId;
 
   const adminKeypair = Ed25519Keypair.fromSecretKey(process.env.ADMIN_PRIVATE_KEY);
   const ownerKeypair = Ed25519Keypair.fromSecretKey(process.env.OWNER_PRIVATE_KEY);
@@ -21,10 +24,12 @@ describe(`Testing owner-only whitelist`, () => {
 
     const res = await executeTransaction(
       {
-        target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::create_whitelist`,
+        target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::create_whitelist_entry`,
+        typeArguments: [
+          EXAMPLE_TOKEN_GATING_TYPE
+        ],
         arguments: [
           tx.pure.string("vault-id-here"),
-          tx.pure.string(EXAMPLE_TOKEN_GATING_TYPE),
           tx.pure.u64(10),
         ],
       },
@@ -47,6 +52,14 @@ describe(`Testing owner-only whitelist`, () => {
       )
     )?.objectId;
     expect(capId).toBeTruthy();
+    tgaId = (
+      res?.objectChanges?.find(
+        (object) =>
+          object.type === 'created' &&
+          object.objectType?.includes('whitelist::TGA')
+      )
+    )?.objectId;
+    expect(tgaId).toBeTruthy();
   });
 
   it("should add user to the whitelist", async () => {
@@ -55,8 +68,8 @@ describe(`Testing owner-only whitelist`, () => {
     await executeTransaction(
       {
         arguments: [
-          tx.object(whitelistId), 
-          tx.object(capId), 
+          tx.object(whitelistId),
+          tx.object(capId),
           tx.pure.address(randomKeypair.toSuiAddress())
         ],
         target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::add`,
@@ -72,8 +85,8 @@ describe(`Testing owner-only whitelist`, () => {
     await executeTransaction(
       {
         arguments: [
-          tx.object(whitelistId), 
-          tx.object(capId), 
+          tx.object(whitelistId),
+          tx.object(capId),
           tx.pure.address(randomKeypair.toSuiAddress())
         ],
         target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::remove`,
@@ -90,14 +103,109 @@ describe(`Testing owner-only whitelist`, () => {
       await executeTransaction(
         {
           arguments: [
-            tx.object(whitelistId), 
-            tx.object(capId), 
+            tx.object(whitelistId),
+            tx.object(capId),
             tx.pure.address(adminKeypair.toSuiAddress())
           ],
           target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::add`,
         },
         tx,
         adminKeypair
+      );
+    }).rejects.toThrow(Error);
+  });
+
+  it("should approve user with required token", async () => {
+    const tx = new Transaction();
+
+    await executeTransaction(
+      {
+        typeArguments: [
+          EXAMPLE_TOKEN_GATING_TYPE
+        ],
+        arguments: [
+          tx.pure.vector('u8', fromHex(tgaId)),
+          tx.object(tgaId),
+          tx.object(EXAMPLE_TOKEN_OBJECT_ID),
+        ],
+        target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::seal_approve`,
+      },
+      tx,
+      adminKeypair
+    );
+  });
+
+  it("should reject user not belonging to the whitelist", async () => {
+    await expect(async () => {
+
+      const tx = new Transaction();
+
+      await executeTransaction(
+        {
+          arguments: [
+            tx.pure.vector('u8', fromHex(whitelistId)),
+            tx.object(whitelistId),
+          ],
+          target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::seal_approve_whitelist`,
+        },
+        tx,
+        adminKeypair
+      );
+    }).rejects.toThrow(Error);
+  });
+
+
+  it("should add admin to the whitelist", async () => {
+    const tx = new Transaction();
+
+    await executeTransaction(
+      {
+        arguments: [
+          tx.object(whitelistId),
+          tx.object(capId),
+          tx.pure.address(adminKeypair.toSuiAddress())
+        ],
+        target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::add`,
+      },
+      tx,
+      ownerKeypair
+    );
+  });
+
+  it("should approve user belonging to the whitelist", async () => {
+    const tx = new Transaction();
+
+    await executeTransaction(
+      {
+        arguments: [
+          tx.pure.vector('u8', fromHex(whitelistId)),
+          tx.object(whitelistId),
+        ],
+        target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::seal_approve_whitelist`,
+      },
+      tx,
+      adminKeypair
+    );
+  });
+
+  it("should reject user using someone elses token", async () => {
+    await expect(async () => {
+      const tx = new Transaction();
+
+      await executeTransaction(
+        {
+          typeArguments: [
+            EXAMPLE_TOKEN_GATING_TYPE
+          ],
+          arguments: [
+            tx.pure.vector('u8', fromHex(tgaId)),
+            tx.object(tgaId),
+            tx.object(EXAMPLE_TOKEN_OBJECT_ID),
+          ],
+          target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::seal_approve`,
+        },
+        tx,
+        ownerKeypair
       );
     }).rejects.toThrow(Error);
   });
@@ -119,11 +227,13 @@ describe(`Testing admin-mode whitelist`, () => {
 
     const res = await executeTransaction(
       {
-        target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::create_admin_whitelist`,
+        target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::create_admin_whitelist_entry`,
+        typeArguments: [
+          EXAMPLE_TOKEN_GATING_TYPE
+        ],
         arguments: [
-          tx.pure.address(ownerKeypair.toSuiAddress()),
           tx.pure.string("vault-id-here"),
-          tx.pure.string(EXAMPLE_TOKEN_GATING_TYPE),
+          tx.pure.address(ownerKeypair.toSuiAddress()),
           tx.pure.u64(10),
         ],
       },
@@ -155,6 +265,14 @@ describe(`Testing admin-mode whitelist`, () => {
       )
     )?.objectId;
     expect(ownerCapId).toBeTruthy();
+    tgaId = (
+      res?.objectChanges?.find(
+        (object) =>
+          object.type === 'created' &&
+          object.objectType?.includes('whitelist::TGA')
+      )
+    )?.objectId;
+    expect(tgaId).toBeTruthy();
   });
 
   it("should add user to the whitelist by the owner", async () => {
@@ -163,8 +281,8 @@ describe(`Testing admin-mode whitelist`, () => {
     await executeTransaction(
       {
         arguments: [
-          tx.object(whitelistId), 
-          tx.object(ownerCapId), 
+          tx.object(whitelistId),
+          tx.object(ownerCapId),
           tx.pure.address(randomKeypair.toSuiAddress())
         ],
         target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::add`,
@@ -181,8 +299,8 @@ describe(`Testing admin-mode whitelist`, () => {
       await executeTransaction(
         {
           arguments: [
-            tx.object(whitelistId), 
-            tx.object(ownerCapId), 
+            tx.object(whitelistId),
+            tx.object(ownerCapId),
             tx.pure.address(randomKeypair.toSuiAddress())
           ],
           target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::add`,
@@ -199,8 +317,8 @@ describe(`Testing admin-mode whitelist`, () => {
     await executeTransaction(
       {
         arguments: [
-          tx.object(whitelistId), 
-          tx.object(ownerCapId), 
+          tx.object(whitelistId),
+          tx.object(ownerCapId),
           tx.pure.address(randomKeypair.toSuiAddress())
         ],
         target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::remove`,
@@ -216,8 +334,8 @@ describe(`Testing admin-mode whitelist`, () => {
     await executeTransaction(
       {
         arguments: [
-          tx.object(whitelistId), 
-          tx.object(adminCapId), 
+          tx.object(whitelistId),
+          tx.object(adminCapId),
           tx.pure.address(randomKeypair2.toSuiAddress())
         ],
         target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::add`,
@@ -233,8 +351,8 @@ describe(`Testing admin-mode whitelist`, () => {
     await executeTransaction(
       {
         arguments: [
-          tx.object(whitelistId), 
-          tx.object(adminCapId), 
+          tx.object(whitelistId),
+          tx.object(adminCapId),
           tx.pure.address(randomKeypair2.toSuiAddress())
         ],
         target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::remove`,
@@ -250,8 +368,8 @@ describe(`Testing admin-mode whitelist`, () => {
     await executeTransaction(
       {
         arguments: [
-          tx.object(whitelistId), 
-          tx.object(ownerCapId), 
+          tx.object(whitelistId),
+          tx.object(ownerCapId),
         ],
         target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::remove_admin_mode`,
       },
@@ -267,10 +385,11 @@ describe(`Testing admin-mode whitelist`, () => {
       await executeTransaction(
         {
           arguments: [
-            tx.object(whitelistId), 
-            tx.object(adminCapId), 
+            tx.object(whitelistId),
+            tx.object(adminCapId),
             tx.pure.address(randomKeypair.toSuiAddress())
           ],
+          typeArguments: [],
           target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::add`,
         },
         tx,
@@ -288,6 +407,7 @@ async function executeTransaction(
   tx.moveCall({
     arguments: moveCall.arguments,
     target: moveCall.target,
+    typeArguments: moveCall.typeArguments
   });
   tx.setGasBudget(10000000);
   tx.setSender(signer.toSuiAddress());

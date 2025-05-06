@@ -40,4 +40,4 @@ npm test
 
 ### move tests
 
-TODO
+TODO: move to a separate module
