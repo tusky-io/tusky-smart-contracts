@@ -8,6 +8,8 @@ const suiClient = new SuiClient({ url: getFullnodeUrl('testnet') });
 
 const EXAMPLE_TOKEN_GATING_TYPE = "0x2::coin::Coin<0x8190b041122eb492bf63cb464476bd68c6b7e570a4079645a8b28732b6197a82::wal::WAL>";
 const EXAMPLE_TOKEN_OBJECT_ID = "0x4c4fdf70c5261c0b3b9495fe2ac57e92f2016025a8db469279af65404433384d";
+const EXAMPLE_WRONG_TOKEN_GATING_TYPE = "0x2::coin::Coin<0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC>";
+const EXAMPLE_WRONG_TOKEN_OBJECT_ID = "0x37d4f7c48d81d32d988ee5aa0d425309b8e946a8f9158f7e7de9eb85e9410cf0";
 
 describe(`Testing owner-only whitelist`, () => {
 
@@ -37,28 +39,11 @@ describe(`Testing owner-only whitelist`, () => {
       ownerKeypair
     );
 
-    whitelistId = (
-      res?.objectChanges?.find(
-        object => object.type === 'created' && object.objectType?.includes('whitelist::Whitelist'),
-      )
-    )?.objectId;
+    whitelistId = getWhitelistId(res?.objectChanges);
     expect(whitelistId).toBeTruthy();
-    capId = (
-      res?.objectChanges?.find(
-        (object) =>
-          object.type === 'created' &&
-          object.objectType?.includes('whitelist::Cap') &&
-          object.owner?.AddressOwner === ownerKeypair.toSuiAddress(),
-      )
-    )?.objectId;
+    capId = getCapId(res?.objectChanges, ownerKeypair.toSuiAddress());
     expect(capId).toBeTruthy();
-    tgaId = (
-      res?.objectChanges?.find(
-        (object) =>
-          object.type === 'created' &&
-          object.objectType?.includes('whitelist::TGA')
-      )
-    )?.objectId;
+    tgaId = getTGAId(res?.objectChanges);
     expect(tgaId).toBeTruthy();
   });
 
@@ -209,6 +194,50 @@ describe(`Testing owner-only whitelist`, () => {
       );
     }).rejects.toThrow(Error);
   });
+
+  it("should reject user using a wrong token", async () => {
+    await expect(async () => {
+      const tx = new Transaction();
+
+      await executeTransaction(
+        {
+          typeArguments: [
+            EXAMPLE_TOKEN_GATING_TYPE
+          ],
+          arguments: [
+            tx.pure.vector('u8', fromHex(tgaId)),
+            tx.object(tgaId),
+            tx.object(EXAMPLE_WRONG_TOKEN_OBJECT_ID),
+          ],
+          target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::seal_approve`,
+        },
+        tx,
+        adminKeypair
+      );
+    }).rejects.toThrow(Error);
+  });
+
+  it("should reject user using a wrong token & token type", async () => {
+    await expect(async () => {
+      const tx = new Transaction();
+
+      await executeTransaction(
+        {
+          typeArguments: [
+            EXAMPLE_WRONG_TOKEN_GATING_TYPE
+          ],
+          arguments: [
+            tx.pure.vector('u8', fromHex(tgaId)),
+            tx.object(tgaId),
+            tx.object(EXAMPLE_WRONG_TOKEN_OBJECT_ID),
+          ],
+          target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::seal_approve`,
+        },
+        tx,
+        adminKeypair
+      );
+    }).rejects.toThrow(Error);
+  });
 });
 
 describe(`Testing admin-mode whitelist`, () => {
@@ -241,37 +270,13 @@ describe(`Testing admin-mode whitelist`, () => {
       adminKeypair
     );
 
-    whitelistId = (
-      res?.objectChanges?.find(
-        object => object.type === 'created' && object.objectType?.includes('whitelist::Whitelist'),
-      )
-    )?.objectId;
+    whitelistId = getWhitelistId(res?.objectChanges);
     expect(whitelistId).toBeTruthy();
-    adminCapId = (
-      res?.objectChanges?.find(
-        (object) =>
-          object.type === 'created' &&
-          object.objectType?.includes('whitelist::Cap') &&
-          object.owner?.AddressOwner === adminKeypair.toSuiAddress(),
-      )
-    )?.objectId;
-    expect(adminCapId).toBeTruthy();
-    ownerCapId = (
-      res?.objectChanges?.find(
-        (object) =>
-          object.type === 'created' &&
-          object.objectType?.includes('whitelist::Cap') &&
-          object.owner?.AddressOwner === ownerKeypair.toSuiAddress(),
-      )
-    )?.objectId;
+    ownerCapId = getCapId(res?.objectChanges, ownerKeypair.toSuiAddress());
     expect(ownerCapId).toBeTruthy();
-    tgaId = (
-      res?.objectChanges?.find(
-        (object) =>
-          object.type === 'created' &&
-          object.objectType?.includes('whitelist::TGA')
-      )
-    )?.objectId;
+    adminCapId = getCapId(res?.objectChanges, adminKeypair.toSuiAddress());
+    expect(adminCapId).toBeTruthy();
+    tgaId = getTGAId(res?.objectChanges);
     expect(tgaId).toBeTruthy();
   });
 
@@ -399,6 +404,33 @@ describe(`Testing admin-mode whitelist`, () => {
   });
 });
 
+function getWhitelistId(objectChanges) {
+  return (
+    objectChanges?.find(
+      object => object.type === 'created' && object.objectType?.includes('whitelist::Whitelist'),
+    )
+  )?.objectId;
+}
+
+function getTGAId(objectChanges) {
+  return (
+    objectChanges?.find(
+      object => object.type === 'created' && object.objectType?.includes('whitelist::TGA'),
+    )
+  )?.objectId;
+}
+
+function getCapId(objectChanges, owner) {
+  return (
+    objectChanges?.find(
+      (object) =>
+        object.type === 'created' &&
+        object.objectType?.includes('whitelist::Cap') &&
+        object.owner?.AddressOwner === owner,
+    )
+  )?.objectId;
+}
+
 async function executeTransaction(
   moveCall,
   tx,
@@ -421,7 +453,7 @@ async function executeTransaction(
 
   if (dry_run_result.effects.status.status === 'failure') {
     console.log(dry_run_result);
-    throw new Error(getWhitelistErrorMessage(dry_run_result.executionErrorSource));
+    throw new Error(getWhitelistErrorMessage(dry_run_result.executionErrorSource || dry_run_result.effects.status.error));
   }
 
   // execute transaction
@@ -445,12 +477,12 @@ function delay(ms) {
 }
 
 const WHITELIST_ERROR_MAP = {
-  12: /* EInvalidCap */ 'Only the contract owner/admin can perform this action.',
-  77: /* ENoAccess */ 'The address does not belong to the whitelist.',
-  1: /* EDuplicate */ 'The address is already in the whitelist.',
-  2: /* EExceededCapacity */ 'The whitelist capacity exceeded.',
-  3: /* EInvalidOwnerCap */ 'Only the contract owner can perform this action.',
-  4: /* EWhitelistWithNoAdmin */ 'The whitelist does not have the admin mode.',
+  1: /* EInvalidCap */ 'Only the contract owner/admin can perform this action.',
+  2: /* EInvalidOwnerCap */ 'Only the contract owner can perform this action.',
+  3: /* ENoAccess */ 'The address does not belong to the whitelist.',
+  4: /* EDuplicate */ 'The address is already in the whitelist.',
+  5: /* EExceededCapacity */ 'The whitelist capacity exceeded.',
+  6: /* EWhitelistWithNoAdmin */ 'The whitelist does not have the admin mode.',
 };
 
 function getWhitelistErrorMessage(errorMessage) {
@@ -459,5 +491,5 @@ function getWhitelistErrorMessage(errorMessage) {
     const code = parseInt(match[1], 10);
     return WHITELIST_ERROR_MAP[code] || `Smart contract error.`;
   }
-  return 'Smart contract error.';
+  return 'Smart contract error: ' + errorMessage;
 }

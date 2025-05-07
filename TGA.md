@@ -2,16 +2,26 @@
 
 Tusky leverages Token-Gated Access (TGA) vaults using [Seal SDK](https://github.com/MystenLabs/seal).
 
-When a user creates a TGA vault in Tusky, a new whitelist is created within the smart contract.
+When a user creates a TGA vault in Tusky, a new whitelist & TGA service are created within the smart contract.
+
+Users can later access the service by either holding the required token or belonging to the whitelist.
+
+## TGA
+
+A TGA<T> is a Sui on-chain object defining following fields:
+
+- `id` - unique whitelist id
+- `vaultId` - connecting the on-chain TGA service to a Tusky vault (1:1 connection)
+
+where <T> is a type of required token to access the service
 
 ## Whitelist
 
 A Whitelist is a Sui on-chain object defining following fields:
 
 - `id` - unique whitelist id
-- `vaultId` - connecting the on-chain whitelist to a Tusky vault (1:1 connection)
+- `serviceId` - connecting to the on-chain TGA service (1:1 connection)
 - `capacity` - maximum number of members
-- `gatingType` - type of Sui token needed to join the whitelist
 - `admin` - a flag indicating whether the whitelist is owner-only or admin-mode
 - `list` - list of whitelisted wallet addresses for access-control
 
@@ -23,7 +33,7 @@ Capability object defines following fields:
 
 - `id` - unique capability id
 - `whitelistId` - connecting the existing whitelist to the capability
-- `isOwner` - a flag indicating whether the capability belongs to the owner or admin
+- `capType` - a flag indicating whether the capability belongs to the owner or admin
 
 ## Whitelist modes
 
@@ -46,8 +56,8 @@ The only way to encrypt/decrypt the data is the client-side encryption (CSE).
 To create admin-mode whitelist: `${WHITELIST_PACKAGE_ID}::whitelist::create_admin_whitelist`.
 
 When creating a whitelist, two Capability objects are also created:
-- one for the whitelist owner (`isOwner == true`)
-- one for the whitelist admin (`isOwner == false`)
+- one for the whitelist owner (`CapType::Owner`)
+- one for the whitelist admin (`CapType::Admin`)
 
 The whitelist owner can at any point remove admin mode and become unique whitelist actor (by calling: `${WHITELIST_PACKAGE_ID}::whitelist::remove_admin_mode`).
 

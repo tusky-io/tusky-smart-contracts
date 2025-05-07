@@ -2,12 +2,12 @@ module tga::whitelist;
 
 use std::string::String;
 
-const EInvalidCap : u64 = 12;
-const ENoAccess : u64 = 77;
-const EDuplicate : u64 = 1;
-const EExceededCapacity : u64 = 2;
-const EInvalidOwnerCap : u64 = 3;
-const EWhitelistWithNoAdmin : u64 = 4;
+const EInvalidCap : u64 = 1;
+const EInvalidOwnerCap : u64 = 2;
+const ENoAccess : u64 = 3;
+const EDuplicate : u64 = 4;
+const EExceededCapacity : u64 = 5;
+const EWhitelistWithNoAdmin : u64 = 6;
 
 public struct TGA<phantom T> has key {
     id: UID,
@@ -170,6 +170,21 @@ fun check_access<T>(id: vector<u8>, service: &TGA<T>, _token: &T): bool {
 }
 
 #[test_only]
+public fun transfer_cap(cap: Cap, recipient: address) {
+    transfer::transfer(cap, recipient);
+}
+
+#[test_only]
+public fun share_whitelist(whitelist: Whitelist) {
+    transfer::share_object(whitelist);
+}
+
+#[test_only]
+public fun share_tga<T>(tga: TGA<T>) {
+    transfer::share_object(tga);
+}
+
+#[test_only]
 public fun destroy_tga_for_testing<T>(tga: TGA<T>) {
     let TGA { id, .. } = tga;
     object::delete(id);
@@ -179,214 +194,4 @@ public fun destroy_tga_for_testing<T>(tga: TGA<T>) {
 public fun destroy_whitelist_for_testing(wl: Whitelist) {
     let Whitelist { id, .. } = wl;
     object::delete(id);
-}
-
-#[test]
-fun test_admin_whitelist() {
-    use sui::test_scenario;
-    use sui::coin;
-    use sui::sui::SUI;
-    use std::string::utf8;
-
-    // test addresses representing users
-    let owner = @0xCAFE;
-    let admin = @0xFACE;
-    let user = @0xFAFE;
-
-    let whitelist;
-    let mut whitelist_val;
-
-    let mut scenario_val = test_scenario::begin(admin);
-    let scenario = &mut scenario_val;
-    {
-        // first transaction executed by admin to create an admin whitelist
-        let (tga, wl, ownerCap, adminCap) = create_admin_whitelist_service<coin::Coin<SUI>>(utf8(b"xxxx"), owner, 10, scenario.ctx());
-        transfer::transfer(adminCap, admin);
-        transfer::transfer(ownerCap, owner);
-        transfer::share_object(wl);
-        transfer::share_object(tga);
-    };
-
-    test_scenario::next_tx(scenario, admin);
-    {
-        // transaction executed by the whitelist admin to add the new user to the whitelist
-        whitelist_val = test_scenario::take_shared<Whitelist>(scenario);
-        whitelist = &mut whitelist_val;
-        let cap = test_scenario::take_from_sender<Cap>(scenario);
-        add(whitelist, &cap, owner);
-        test_scenario::return_to_sender(scenario, cap);
-    };
-
-    test_scenario::next_tx(scenario, owner);
-    {
-        // transaction executed by the whitelist owner to add the new user to the whitelist
-        let cap = test_scenario::take_from_sender<Cap>(scenario);
-        add(whitelist, &cap, user);
-        test_scenario::return_to_sender(scenario, cap);
-    };
-
-    test_scenario::next_tx(scenario, owner);
-    {
-        // transaction executed by the whitelist owner to remove the admin mode
-        let cap = test_scenario::take_from_sender<Cap>(scenario);
-        remove_admin_mode(whitelist, &cap);
-        test_scenario::return_to_sender(scenario, cap);
-    };
-
-    let tga = test_scenario::take_shared<tga::whitelist::TGA<sui::coin::Coin<sui::sui::SUI>>>(scenario);
-    destroy_tga_for_testing<coin::Coin<SUI>>(tga);
-    destroy_whitelist_for_testing(whitelist_val);
-    test_scenario::end(scenario_val);
-}
-
-#[expected_failure(abort_code = EInvalidOwnerCap)]
-#[test]
-fun test_admin_whitelist_failing() {
-    use sui::test_scenario;
-    use sui::coin;
-    use sui::sui::SUI;
-    use std::string::utf8;
-
-    // test addresses representing users
-    let owner = @0xCAFE;
-    let admin = @0xFACE;
-    let user = @0xFAFE;
-
-    let whitelist;
-    let mut whitelist_val;
-
-    let mut scenario_val = test_scenario::begin(admin);
-    let scenario = &mut scenario_val;
-    {
-        // first transaction executed by admin to create an admin whitelist
-        let (tga, wl, ownerCap, adminCap) = create_admin_whitelist_service<coin::Coin<SUI>>(utf8(b"xxxx"), owner, 10, scenario.ctx());
-        transfer::transfer(adminCap, admin);
-        transfer::transfer(ownerCap, owner);
-        transfer::share_object(wl);
-        transfer::share_object(tga);
-    };
-
-    test_scenario::next_tx(scenario, admin);
-    {
-        // transaction executed by the whitelist admin to add the new user to the whitelist
-        whitelist_val = test_scenario::take_shared<Whitelist>(scenario);
-        whitelist = &mut whitelist_val;
-        let cap = test_scenario::take_from_sender<Cap>(scenario);
-        add(whitelist, &cap, owner);
-        test_scenario::return_to_sender(scenario, cap);
-    };
-
-    test_scenario::next_tx(scenario, owner);
-    {
-        // transaction executed by the whitelist owner to remove the admin mode
-        let cap = test_scenario::take_from_sender<Cap>(scenario);
-        remove_admin_mode(whitelist, &cap);
-        test_scenario::return_to_sender(scenario, cap);
-    };
-
-    test_scenario::next_tx(scenario, admin);
-    {
-        // transaction executed by the whitelist admin to add the new user to the whitelist
-        // should fail - no admin mode
-        let cap = test_scenario::take_from_sender<Cap>(scenario);
-        add(whitelist, &cap, user);
-        test_scenario::return_to_sender(scenario, cap);
-    };
-
-    let tga = test_scenario::take_shared<tga::whitelist::TGA<sui::coin::Coin<sui::sui::SUI>>>(scenario);
-    destroy_tga_for_testing<coin::Coin<SUI>>(tga);
-    destroy_whitelist_for_testing(whitelist_val);
-    test_scenario::end(scenario_val);
-}
-
-#[expected_failure(abort_code = EDuplicate)]
-#[test]
-fun test_admin_whitelist_failing_double() {
-    use sui::test_scenario;
-    use sui::coin;
-    use sui::sui::SUI;
-    use std::string::utf8;
-
-    // test addresses representing users
-    let owner = @0xCAFE;
-    let admin = @0xFACE;
-
-    let whitelist;
-    let mut whitelist_val;
-
-    let mut scenario_val = test_scenario::begin(admin);
-    let scenario = &mut scenario_val;
-    {
-        // first transaction executed by admin to create an admin whitelist
-        let (tga, wl, ownerCap, adminCap) = create_admin_whitelist_service<coin::Coin<SUI>>(utf8(b"xxxx"), owner, 10, scenario.ctx());
-        transfer::transfer(adminCap, admin);
-        transfer::transfer(ownerCap, owner);
-        transfer::share_object(wl);
-        transfer::share_object(tga);
-    };
-
-    test_scenario::next_tx(scenario, admin);
-    {
-        // transaction executed by the whitelist admin to add the new user to the whitelist
-        whitelist_val = test_scenario::take_shared<Whitelist>(scenario);
-        whitelist = &mut whitelist_val;
-        let cap = test_scenario::take_from_sender<Cap>(scenario);
-        add(whitelist, &cap, owner);
-        test_scenario::return_to_sender(scenario, cap);
-    };
-
-    test_scenario::next_tx(scenario, admin);
-    {
-        // transaction executed by the whitelist admin to add the new user to the whitelist
-        // should fail - user duplicate
-        let cap = test_scenario::take_from_sender<Cap>(scenario);
-        add(whitelist, &cap, owner);
-        test_scenario::return_to_sender(scenario, cap);
-    };
-
-    let tga = test_scenario::take_shared<tga::whitelist::TGA<sui::coin::Coin<sui::sui::SUI>>>(scenario);
-    destroy_tga_for_testing<coin::Coin<SUI>>(tga);
-    destroy_whitelist_for_testing(whitelist_val);
-    test_scenario::end(scenario_val);
-}
-
-#[test]
-fun test_tga() {
-    use sui::test_scenario;
-    use sui::coin;
-    use sui::sui::SUI;
-    use std::string::utf8;
-
-    // test addresses representing users
-    let owner = @0xCAFE;
-    let user = @0xFACE;
-
-    let coin;
-
-    let mut scenario_val = test_scenario::begin(owner);
-    let scenario = &mut scenario_val;
-    {
-        // create TGA service by the owner
-        let tga = create_tga_service<coin::Coin<SUI>>(utf8(b"vaultId"), scenario.ctx());
-        transfer::share_object(tga);
-    };
-    test_scenario::next_tx(scenario, user);
-    {
-        // mint coin by the user
-        let coin_val = coin::mint_for_testing<SUI>(10, scenario.ctx());
-
-        transfer::public_transfer(coin_val, user);
-    };
-
-    test_scenario::next_tx(scenario, user);
-    {
-        coin = test_scenario::take_from_address<sui::coin::Coin<sui::sui::SUI>>(scenario, user);
-
-        // should approve access request by using the minted coin by the user
-        let tga_val = test_scenario::take_shared<TGA<sui::coin::Coin<sui::sui::SUI>>>(scenario);
-        assert!(check_access<coin::Coin<SUI>>(object::id<TGA<sui::coin::Coin<sui::sui::SUI>>>(&tga_val).to_bytes(), &tga_val, &coin));
-        test_scenario::return_shared(tga_val);
-        test_scenario::return_to_address(user, coin);
-    };
-    test_scenario::end(scenario_val);
 }
