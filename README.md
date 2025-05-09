@@ -21,7 +21,15 @@ sui client publish --gas-budget 100000000
 
 ## Contract tests
 
-### jest tests
+### move tests
+
+```bash
+sui move test
+```
+
+See tests module [here](tests).
+
+### e2e tests
 
 Create a `.env` file in the root directory with the following variables:
 
@@ -31,13 +39,9 @@ OWNER_PRIVATE_KEY="testing-private-key-2"
 WHITELIST_PACKAGE_ID="deployed-package-id"
 ```
 
-Create a `.env` file in the root directory with the following variables:
-
 ```bash
 npm install
 npm test
 ```
 
-### move tests
-
-TODO
+See e2e tests module [here](e2e).
