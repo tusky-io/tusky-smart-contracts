@@ -127,8 +127,12 @@ describe(`Testing owner-only whitelist`, () => {
 
       await executeTransaction(
         {
+          typeArguments: [
+            EXAMPLE_TOKEN_GATING_TYPE
+          ],
           arguments: [
-            tx.pure.vector('u8', fromHex(whitelistId)),
+            tx.pure.vector('u8', fromHex(tgaId)),
+            tx.object(tgaId),
             tx.object(whitelistId),
           ],
           target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::seal_approve_whitelist`,
@@ -162,8 +166,12 @@ describe(`Testing owner-only whitelist`, () => {
 
     await executeTransaction(
       {
+        typeArguments: [
+          EXAMPLE_TOKEN_GATING_TYPE
+        ],
         arguments: [
-          tx.pure.vector('u8', fromHex(whitelistId)),
+          tx.pure.vector('u8', fromHex(tgaId)),
+          tx.object(tgaId),
           tx.object(whitelistId),
         ],
         target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::seal_approve_whitelist`,

@@ -12,9 +12,10 @@ const EWhitelistWithNoAdmin : u64 = 6;
 public struct TGA<phantom T> has key {
     id: UID,
     vaultId: String,
+    whitelistId: Option<ID>
 }
 
-public struct Whitelist has key {
+public struct Whitelist has key, store {
     id: UID,
     serviceId: ID,
     admin: bool,
@@ -37,20 +38,23 @@ public fun create_tga_service<T>(vaultId: String, ctx: &mut TxContext): TGA<T> {
     TGA<T> {
         id: object::new(ctx),
         vaultId: vaultId,
+        whitelistId: option::none()
     }
 }
 
-public fun create_admin_whitelist_service<T>(vaultId: String, owner: address, capacity: u64, ctx: &mut TxContext): (TGA<T>, Whitelist, Cap, Cap) {
-   let tga = TGA<T> {
-        id: object::new(ctx),
-        vaultId: vaultId,
-    };
+public fun create_admin_whitelist_service<T>(vaultId: String, capacity: u64, ctx: &mut TxContext): (TGA<T>, Whitelist, Cap, Cap) {
+    let tgaId = object::new(ctx);
     let wl = Whitelist {
         id: object::new(ctx),
-        serviceId: object::id(&tga),
+        serviceId: tgaId.to_inner(),
         list: vector::empty(),
         capacity: capacity,
         admin: true
+    };
+   let tga = TGA<T> {
+        id: tgaId,
+        vaultId: vaultId,
+        whitelistId: option::some( object::id(&wl))
     };
     let ownerCap = Cap {
         id: object::new(ctx),
@@ -73,7 +77,7 @@ entry fun create_whitelist_entry<T>(vaultId: String, capacity: u64, ctx: &mut Tx
 }
 
 entry fun create_admin_whitelist_entry<T>(vaultId: String, owner: address, capacity: u64, ctx: &mut TxContext) {
-    let (tga, wl, ownerCap, adminCap) = create_admin_whitelist_service<T>(vaultId, owner, capacity, ctx);
+    let (tga, wl, ownerCap, adminCap) = create_admin_whitelist_service<T>(vaultId, capacity, ctx);
     transfer::share_object(wl);
     transfer::share_object(tga);
     transfer::transfer(ownerCap, owner);
@@ -81,16 +85,18 @@ entry fun create_admin_whitelist_entry<T>(vaultId: String, owner: address, capac
 }
 
 public fun create_whitelist_service<T>(vaultId: String, capacity: u64, ctx: &mut TxContext): (TGA<T>, Whitelist, Cap) {
-   let tga = TGA<T> {
-        id: object::new(ctx),
-        vaultId: vaultId,
-    };
+    let tgaId = object::new(ctx);
     let wl = Whitelist {
         id: object::new(ctx),
-        serviceId: object::id(&tga),
+        serviceId: tgaId.to_inner(),
         list: vector::empty(),
         capacity: capacity,
         admin: false
+    };
+    let tga = TGA<T> {
+        id: tgaId,
+        vaultId: vaultId,
+        whitelistId: option::some( object::id(&wl))
     };
     let cap = Cap {
         id: object::new(ctx),
@@ -121,14 +127,14 @@ public fun remove_admin_mode(wl: &mut Whitelist, cap: &Cap) {
     wl.admin = false;
 }
 
-public fun namespace(wl: &Whitelist): vector<u8> {
-    wl.id.to_bytes()
+public fun namespace<T>(tga: &TGA<T>): vector<u8> {
+    tga.id.to_bytes()
 }
 
 /// All whitelisted addresses can access all IDs with the prefix of the whitelist
-fun approve_internal(caller: address, id: vector<u8>, wl: &Whitelist): bool {
+fun approve_internal<T>(caller: address, id: vector<u8>, service: &TGA<T>, whitelist: &Whitelist): bool {
     // Check if the id has the right prefix
-    let namespace = namespace(wl);
+    let namespace = namespace<T>(service);
     let mut i = 0;
     if (namespace.length() > id.length()) {
         return false
@@ -141,15 +147,19 @@ fun approve_internal(caller: address, id: vector<u8>, wl: &Whitelist): bool {
     };
 
     // Check if user is in the whitelist
-    wl.list.contains(&caller)
+    if (service.whitelistId.is_none()) {
+      return false
+    };
+    
+    whitelist.list.contains(&caller)
 }
 
 public fun seal_approve<T>(id: vector<u8>, service: &TGA<T>, _token: &T) {
     assert!(check_access(id, service, _token), ENoAccess);
 }
 
-entry fun seal_approve_whitelist(id: vector<u8>, wl: &Whitelist,  ctx: &TxContext) {
-    assert!(approve_internal(ctx.sender(), id, wl), ENoAccess);
+entry fun seal_approve_whitelist<T>(id: vector<u8>,  service: &TGA<T>, whitelist: &Whitelist, ctx: &TxContext) {
+    assert!(approve_internal<T>(ctx.sender(), id, service, whitelist), ENoAccess);
 }
 
 /// All addresses can access all IDs with the prefix of the service

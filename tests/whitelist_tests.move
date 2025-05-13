@@ -39,11 +39,11 @@ fun test_whitelist_success_path() {
     test_scenario::next_tx(scenario, user);
     {
         // transaction executed by the user to request access
-        whitelist::seal_approve_whitelist(object::id<Whitelist>(whitelist).to_bytes(), whitelist, scenario.ctx());
+        let tga_val = test_scenario::take_shared<TGA<sui::coin::Coin<sui::sui::SUI>>>(scenario);
+        whitelist::seal_approve_whitelist<sui::coin::Coin<sui::sui::SUI>>(object::id<TGA<sui::coin::Coin<sui::sui::SUI>>>(&tga_val).to_bytes(), &tga_val, &whitelist_val, scenario.ctx());
+        test_scenario::return_shared(tga_val);
     };
 
-    let tga = test_scenario::take_shared<tga::whitelist::TGA<sui::coin::Coin<sui::sui::SUI>>>(scenario);
-    whitelist::destroy_tga_for_testing<coin::Coin<SUI>>(tga);
     whitelist::destroy_whitelist_for_testing(whitelist_val);
     test_scenario::end(scenario_val);
 }
@@ -60,8 +60,9 @@ fun test_whitelist_fail_no_access() {
     let owner = @0x1;
     let user = @0x2;
 
-    let whitelist;
     let whitelist_val;
+
+    let tga_val;
 
     let mut scenario_val = test_scenario::begin(owner);
     let scenario = &mut scenario_val;
@@ -78,9 +79,10 @@ fun test_whitelist_fail_no_access() {
         // transaction executed by the user to request access
         // should fail - no access
         whitelist_val = test_scenario::take_shared<Whitelist>(scenario);
-        whitelist = &whitelist_val;
-        whitelist::seal_approve_whitelist(object::id<Whitelist>(&whitelist_val).to_bytes(), whitelist, scenario.ctx());
+        tga_val = test_scenario::take_shared<TGA<sui::coin::Coin<sui::sui::SUI>>>(scenario);
+        whitelist::seal_approve_whitelist<sui::coin::Coin<sui::sui::SUI>>(object::id<TGA<sui::coin::Coin<sui::sui::SUI>>>(&tga_val).to_bytes(), &tga_val, &whitelist_val, scenario.ctx());
         test_scenario::return_shared(whitelist_val);
+        test_scenario::return_shared(tga_val);
     };
 
     let tga = test_scenario::take_shared<tga::whitelist::TGA<sui::coin::Coin<sui::sui::SUI>>>(scenario);
@@ -157,7 +159,7 @@ fun test_admin_whitelist_success_path() {
     let scenario = &mut scenario_val;
     {
         // first transaction executed by admin to create an admin whitelist
-        let (tga, wl, ownerCap, adminCap) = whitelist::create_admin_whitelist_service<coin::Coin<SUI>>(utf8(b"vault-id-here"), owner, 10, scenario.ctx());
+        let (tga, wl, ownerCap, adminCap) = whitelist::create_admin_whitelist_service<coin::Coin<SUI>>(utf8(b"vault-id-here"), 10, scenario.ctx());
         whitelist::transfer_cap(adminCap, admin);
         whitelist::transfer_cap(ownerCap, owner);
         whitelist::share_whitelist(wl);
@@ -185,7 +187,9 @@ fun test_admin_whitelist_success_path() {
     test_scenario::next_tx(scenario, user);
     {
         // transaction executed by the user to request access
-        whitelist::seal_approve_whitelist(object::id<Whitelist>(whitelist).to_bytes(), whitelist, scenario.ctx());
+        let tga_val = test_scenario::take_shared<TGA<sui::coin::Coin<sui::sui::SUI>>>(scenario);
+        whitelist::seal_approve_whitelist<sui::coin::Coin<sui::sui::SUI>>(object::id<TGA<sui::coin::Coin<sui::sui::SUI>>>(&tga_val).to_bytes(), &tga_val, whitelist, scenario.ctx());
+        test_scenario::return_shared(tga_val);
     };
 
     test_scenario::next_tx(scenario, owner);
@@ -222,7 +226,7 @@ fun test_admin_whitelist_failing() {
     let scenario = &mut scenario_val;
     {
         // first transaction executed by admin to create an admin whitelist
-        let (tga, wl, ownerCap, adminCap) = whitelist::create_admin_whitelist_service<coin::Coin<SUI>>(utf8(b"vault-id-here"), owner, 10, scenario.ctx());
+        let (tga, wl, ownerCap, adminCap) = whitelist::create_admin_whitelist_service<coin::Coin<SUI>>(utf8(b"vault-id-here"), 10, scenario.ctx());
         whitelist::transfer_cap(adminCap, admin);
         whitelist::transfer_cap(ownerCap, owner);
         whitelist::share_whitelist(wl);
