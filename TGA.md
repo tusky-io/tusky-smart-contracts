@@ -41,7 +41,7 @@ There are two types of whitelist:
 
 ### owner-only
 
-To create owner-only whitelist: `${WHITELIST_PACKAGE_ID}::whitelist::create_whitelist`.
+To create owner-only whitelist: `${WHITELIST_PACKAGE_ID}::whitelist::create_whitelist_entry`.
 
 Only one Capability object is created relative to the whitelist.
 
@@ -53,7 +53,7 @@ The only way to encrypt/decrypt the data is the client-side encryption (CSE).
 
 ### admin-mode
 
-To create admin-mode whitelist: `${WHITELIST_PACKAGE_ID}::whitelist::create_admin_whitelist`.
+To create admin-mode whitelist: `${WHITELIST_PACKAGE_ID}::whitelist::create_admin_whitelist_entry`.
 
 When creating a whitelist, two Capability objects are also created:
 - one for the whitelist owner (`CapType::Owner`)
@@ -69,6 +69,11 @@ The admin has the ability to add themselves to the whitelist and thus encrypt/de
 
 ## Using TGA feature with Tusky SDK
 
+**WARNING:** this feature is in Beta, all data will be secured with Seal on Walrus testnet.\
+To use it, please configure Tusky instance with `{ env: "dev" }` and specify testnet Sui tokens for TGA.
+
+Please note that SDK currently supports only the admin-mode whitelists, owner-only whitelists will be available soon.
+
 ## Creating a TGA vault
 
 ```js
@@ -76,23 +81,22 @@ import { Tusky } from "@tusky-io/ts-sdk";
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 
 const keypair = Ed25519Keypair.deriveKeypair("wallet-mnemonic-of-the-whitelist-owner");
-const tusky = await Tusky.init({ wallet: { keypair: keypair } });
+const tusky = await Tusky.init({ wallet: { keypair: keypair }, env: "dev" });
 await tusky.auth.signIn();
 
 const vault = await tusky.vault.create("TGA vault", { 
   whitelist: { 
-    token: { 
-      type: "NFT", 
-      address: "0x98af8b8fde88f3c4bdf0fcedcf9afee7d10f66d480b74fb5a3a2e23dc7f5a564::airdrop::WALAirdrop" 
-    }, 
+    token: "0x98af8b8fde88f3c4bdf0fcedcf9afee7d10f66d480b74fb5a3a2e23dc7f5a564::airdrop::WALAirdrop",
     memberRole: "viewer", 
     capacity: 10 
   } 
 });
 ```
 
+You can view the corresponding on-chain whitelist here: `https://suiscan.xyz/testnet/object/${vault.whitelist.id}`
+
 > **NOTE:** \
-> smart contract call made in the background: `${WHITELIST_PACKAGE_ID}::whitelist::create_admin_whitelist`
+> smart contract call made in the background: `${WHITELIST_PACKAGE_ID}::whitelist::create_admin_whitelist_entry`
 
 
 ## Joining a TGA vault
@@ -102,7 +106,7 @@ import { Tusky } from "@tusky-io/ts-sdk";
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 
 const keypair = Ed25519Keypair.deriveKeypair("wallet-mnemonic-holding-required-token");
-const tusky = await Tusky.init({ wallet: { keypair: keypair } });
+const tusky = await Tusky.init({ wallet: { keypair: keypair }, env: "dev" });
 await tusky.auth.signIn();
 
 const membership = await tusky.vault.join(vaultId);
@@ -120,10 +124,10 @@ import { Tusky } from "@tusky-io/ts-sdk";
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 
 const keypair = Ed25519Keypair.deriveKeypair("wallet-mnemonic-of-the-whitelist-owner");
-const tusky = await Tusky.init({ wallet: { keypair: keypair } });
+const tusky = await Tusky.init({ wallet: { keypair: keypair }, env: "dev" });
 await tusky.auth.signIn();
 
-const members = await tusky.vault.members(vaultId);
+const members = await tusky.vault.membersAll(vaultId);
 const memberToRevoke = members.find((member) => member.role === "viewer");
 await tusky.vault.revokeAccess(memberToRevoke.id);
 ```
