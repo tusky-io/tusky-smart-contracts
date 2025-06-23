@@ -132,6 +132,7 @@ describe(`Testing owner-only whitelist`, () => {
           ],
           arguments: [
             tx.pure.vector('u8', fromHex(tgaId)),
+            tx.pure.vector('u8', fromHex(whitelistId)),
             tx.object(tgaId),
             tx.object(whitelistId),
           ],
@@ -171,6 +172,7 @@ describe(`Testing owner-only whitelist`, () => {
         ],
         arguments: [
           tx.pure.vector('u8', fromHex(tgaId)),
+          tx.pure.vector('u8', fromHex(whitelistId)),
           tx.object(tgaId),
           tx.object(whitelistId),
         ],
@@ -375,6 +377,29 @@ describe(`Testing admin-mode whitelist`, () => {
     );
   });
 
+  it("should access whitelist by admin", async () => {
+
+      const tx = new Transaction();
+
+      await executeTransaction(
+        {
+          typeArguments: [
+            EXAMPLE_TOKEN_GATING_TYPE
+          ],
+          arguments: [
+            tx.pure.vector('u8', fromHex(tgaId)),
+            tx.pure.vector('u8', fromHex(whitelistId)),
+            tx.object(tgaId),
+            tx.object(whitelistId),
+            tx.object(adminCapId),
+          ],
+          target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::seal_approve_admin`,
+        },
+        tx,
+        adminKeypair
+      );
+  });
+
   it("should remove admin mode by the owner", async () => {
     const tx = new Transaction();
 
@@ -389,6 +414,31 @@ describe(`Testing admin-mode whitelist`, () => {
       tx,
       ownerKeypair
     );
+  });
+
+  it("should reject admin in no admin mode", async () => {
+    await expect(async () => {
+
+      const tx = new Transaction();
+
+      await executeTransaction(
+        {
+          typeArguments: [
+            EXAMPLE_TOKEN_GATING_TYPE
+          ],
+          arguments: [
+            tx.pure.vector('u8', fromHex(tgaId)),
+            tx.pure.vector('u8', fromHex(whitelistId)),
+            tx.object(tgaId),
+            tx.object(whitelistId),
+            tx.object(adminCapId),
+          ],
+          target: `${process.env.WHITELIST_PACKAGE_ID}::whitelist::seal_approve_admin`,
+        },
+        tx,
+        adminKeypair
+      );
+    }).rejects.toThrow(Error);
   });
 
   it("should fail adding new user by the old admin", async () => {
