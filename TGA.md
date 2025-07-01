@@ -81,7 +81,7 @@ import { Tusky } from "@tusky-io/ts-sdk";
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 
 const keypair = Ed25519Keypair.deriveKeypair("wallet-mnemonic-of-the-whitelist-owner");
-const tusky = await Tusky.init({ wallet: { keypair: keypair }, env: "dev" });
+const tusky = new Tusky({ wallet: { keypair: keypair }, env: "dev" });
 await tusky.auth.signIn();
 
 const vault = await tusky.vault.create("TGA vault", { 
@@ -106,7 +106,7 @@ import { Tusky } from "@tusky-io/ts-sdk";
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 
 const keypair = Ed25519Keypair.deriveKeypair("wallet-mnemonic-holding-required-token");
-const tusky = await Tusky.init({ wallet: { keypair: keypair }, env: "dev" });
+const tusky = new Tusky({ wallet: { keypair: keypair }, env: "dev" });
 await tusky.auth.signIn();
 
 const membership = await tusky.vault.join(vaultId);
@@ -124,7 +124,7 @@ import { Tusky } from "@tusky-io/ts-sdk";
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 
 const keypair = Ed25519Keypair.deriveKeypair("wallet-mnemonic-of-the-whitelist-owner");
-const tusky = await Tusky.init({ wallet: { keypair: keypair }, env: "dev" });
+const tusky = new Tusky({ wallet: { keypair: keypair }, env: "dev" });
 await tusky.auth.signIn();
 
 const members = await tusky.vault.membersAll(vaultId);
@@ -134,3 +134,22 @@ await tusky.vault.revokeAccess(memberToRevoke.id);
 
 > **NOTE:** \
 > smart contract call made in the background: `${WHITELIST_PACKAGE_ID}::whitelist::remove`
+
+
+## Accessing data within TGA vault
+
+Whenever data is being accessed from the TGA vault, Seal decryption is handled by the Tusky API/SDK.
+
+```js
+import { Tusky } from "@tusky-io/ts-sdk";
+import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+
+const keypair = Ed25519Keypair.deriveKeypair("wallet-mnemonic-of-the-whitelist-owner");
+const tusky = new Tusky({ wallet: { keypair: keypair }, env: "dev" });
+await tusky.auth.signIn();
+
+const vaultMetadata = await tusky.vault.get(vaultId);
+```
+
+> **NOTE:** \
+> smart contract call made in the background: `${WHITELIST_PACKAGE_ID}::whitelist::seal_approve_admin`
