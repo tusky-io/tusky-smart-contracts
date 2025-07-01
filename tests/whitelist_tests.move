@@ -40,7 +40,7 @@ fun test_whitelist_success_path() {
     {
         // transaction executed by the user to request access
         let tga_val = test_scenario::take_shared<TGA<sui::coin::Coin<sui::sui::SUI>>>(scenario);
-        whitelist::seal_approve_whitelist<sui::coin::Coin<sui::sui::SUI>>(object::id<TGA<sui::coin::Coin<sui::sui::SUI>>>(&tga_val).to_bytes(), &tga_val, &whitelist_val, scenario.ctx());
+        whitelist::seal_approve_whitelist<sui::coin::Coin<sui::sui::SUI>>(object::id<TGA<sui::coin::Coin<sui::sui::SUI>>>(&tga_val).to_bytes(), object::id<Whitelist>(&whitelist_val).to_bytes(), &tga_val, &whitelist_val, scenario.ctx());
         test_scenario::return_shared(tga_val);
     };
 
@@ -80,7 +80,7 @@ fun test_whitelist_fail_no_access() {
         // should fail - no access
         whitelist_val = test_scenario::take_shared<Whitelist>(scenario);
         tga_val = test_scenario::take_shared<TGA<sui::coin::Coin<sui::sui::SUI>>>(scenario);
-        whitelist::seal_approve_whitelist<sui::coin::Coin<sui::sui::SUI>>(object::id<TGA<sui::coin::Coin<sui::sui::SUI>>>(&tga_val).to_bytes(), &tga_val, &whitelist_val, scenario.ctx());
+        whitelist::seal_approve_whitelist<sui::coin::Coin<sui::sui::SUI>>(object::id<TGA<sui::coin::Coin<sui::sui::SUI>>>(&tga_val).to_bytes(), object::id<Whitelist>(&whitelist_val).to_bytes(),&tga_val, &whitelist_val, scenario.ctx());
         test_scenario::return_shared(whitelist_val);
         test_scenario::return_shared(tga_val);
     };
@@ -188,7 +188,7 @@ fun test_admin_whitelist_success_path() {
     {
         // transaction executed by the user to request access
         let tga_val = test_scenario::take_shared<TGA<sui::coin::Coin<sui::sui::SUI>>>(scenario);
-        whitelist::seal_approve_whitelist<sui::coin::Coin<sui::sui::SUI>>(object::id<TGA<sui::coin::Coin<sui::sui::SUI>>>(&tga_val).to_bytes(), &tga_val, whitelist, scenario.ctx());
+        whitelist::seal_approve_whitelist<sui::coin::Coin<sui::sui::SUI>>(object::id<TGA<sui::coin::Coin<sui::sui::SUI>>>(&tga_val).to_bytes(), object::id<Whitelist>(whitelist).to_bytes(),&tga_val, whitelist, scenario.ctx());
         test_scenario::return_shared(tga_val);
     };
 

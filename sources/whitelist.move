@@ -132,18 +132,19 @@ public fun namespace<T>(tga: &TGA<T>): vector<u8> {
 }
 
 /// All whitelisted addresses can access all IDs with the prefix of the whitelist
-fun approve_internal<T>(caller: address, id: vector<u8>, service: &TGA<T>, whitelist: &Whitelist): bool {
-    // Check if the id has the right prefix
-    let namespace = namespace<T>(service);
-    let mut i = 0;
-    if (namespace.length() > id.length()) {
-        return false
+fun approve_internal<T>(caller: address, serviceId: vector<u8>, whitelistId: vector<u8>, service: &TGA<T>, whitelist: &Whitelist): bool {
+    // Check if the service id has the right prefix
+    if (!check_id_prefix(serviceId, service.id.to_bytes())) {
+      return false
     };
-    while (i < namespace.length()) {
-        if (namespace[i] != id[i]) {
-            return false
-        };
-        i = i + 1;
+    // Check if the whitelist id has the right prefix
+    if (!check_id_prefix(whitelistId, whitelist.id.to_bytes())) {
+      return false
+    };
+
+    // Check if whitelist & service are connected
+    if (service.whitelistId.borrow().to_bytes() != whitelist.id.to_bytes()) {
+      return false
     };
 
     // Check if user is in the whitelist
@@ -158,20 +159,31 @@ public fun seal_approve<T>(id: vector<u8>, service: &TGA<T>, _token: &T) {
     assert!(check_access(id, service, _token), ENoAccess);
 }
 
-entry fun seal_approve_whitelist<T>(id: vector<u8>,  service: &TGA<T>, whitelist: &Whitelist, ctx: &TxContext) {
-    assert!(approve_internal<T>(ctx.sender(), id, service, whitelist), ENoAccess);
+entry fun seal_approve_whitelist<T>(serviceId: vector<u8>, whitelistId: vector<u8>, service: &TGA<T>, whitelist: &Whitelist, ctx: &TxContext) {
+    assert!(approve_internal<T>(ctx.sender(), serviceId, whitelistId, service, whitelist), ENoAccess);
+}
+
+entry fun seal_approve_admin<T>(serviceId: vector<u8>, whitelistId: vector<u8>, service: &TGA<T>, whitelist: &Whitelist, cap: &Cap) {
+    assert!(check_id_prefix(serviceId, service.id.to_bytes()), ENoAccess);
+    assert!(check_id_prefix(whitelistId, whitelist.id.to_bytes()), ENoAccess);
+    assert!(cap.whitelistId == object::id(whitelist), EInvalidCap);
+    assert!((whitelist.admin == true) || (cap.capType == CapType::Owner), EInvalidOwnerCap);
 }
 
 /// All addresses can access all IDs with the prefix of the service
 fun check_access<T>(id: vector<u8>, service: &TGA<T>, _token: &T): bool {
-    // Check if the id has the right prefix
-    let namespace = service.id.to_bytes();
+    check_id_prefix(id, service.id.to_bytes())
+}
+
+/// All addresses can access all IDs with the prefix of the service
+fun check_id_prefix(id: vector<u8>, namespaceId: vector<u8>): bool {
+     // Check if the id has the right prefix
     let mut i = 0;
-    if (namespace.length() > id.length()) {
+    if (namespaceId.length() > id.length()) {
         return false
     };
-    while (i < namespace.length()) {
-        if (namespace[i] != id[i]) {
+    while (i < namespaceId.length()) {
+        if (namespaceId[i] != id[i]) {
             return false
         };
         i = i + 1;
